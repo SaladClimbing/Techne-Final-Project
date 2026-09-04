@@ -35,8 +35,8 @@ for (yr in seasons) {
         TRUE ~ "Shot on Goal"
       ),
       event_label = factor(event_label, levels = c("Shot on Goal", "Miss", "Goal")),
-      x_jitter = arenaAdjustedXCord + runif(n(), -0.4, 0.4),
-      y_jitter = arenaAdjustedYCord + runif(n(), -0.4, 0.4),
+      x_jitter = xCord + runif(n(), -0.4, 0.4),
+      y_jitter = pmax(-42.5, pmin(42.5, arenaAdjustedYCord + runif(n(), -0.4, 0.4))),
       corner_r = 28,
       corner_cx = 72,
       corner_cy = 14.5,
@@ -62,7 +62,37 @@ for (yr in seasons) {
 
   n_goals <- sum(yr_shots$goal == 1)
 
-  p <- geom_hockey("NHL") +
+  rink_colors <- list(
+    plot_background = "#161821",
+    boards          = "#2e313f",
+    ozone_ice       = "#1e2132",
+    nzone_ice       = "#1e2132",
+    dzone_ice       = "#1e2132",
+    center_line     = "#5c3040",
+    zone_line       = "#84a0c6",
+    goal_line       = "#5c3040",
+    restricted_trapezoid = "#5c3040",
+    goal_crease_outline = "#5c3040",
+    goal_crease_fill = "#2a3a4a",
+    referee_crease  = "#3e445e",
+    center_faceoff_spot = "#84a0c6",
+    faceoff_spot_ring = "#5c3040",
+    faceoff_spot_stripe = "#5c3040",
+    center_faceoff_circle = "#84a0c6",
+    odzone_faceoff_circle = "#5c3040",
+    faceoff_line    = "#3a2530",
+    goal_frame      = "#5c3040",
+    goal_fill       = "#2e313f",
+    team_a_bench    = "#2e313f",
+    team_b_bench    = "#2e313f",
+    team_a_penalty_box = "#2e313f",
+    team_b_penalty_box = "#2e313f",
+    off_ice_officials_box = "#3e445e"
+  )
+
+  p <- geom_hockey("NHL", color_updates = rink_colors) +
+    annotate("text", x = -80, y = 0, label = "Away", color = "#c6c8d1", size = 5, fontface = "bold", alpha = 0.5) +
+    annotate("text", x = 80, y = 0, label = "Home", color = "#c6c8d1", size = 5, fontface = "bold", alpha = 0.5) +
     geom_point(
       data = yr_shots %>% filter(event_label != "Goal"),
       aes(x = x_jitter, y = y_jitter),
