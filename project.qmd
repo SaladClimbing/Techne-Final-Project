@@ -1,0 +1,148 @@
+---
+title: "Milestone 3"
+author: "Andrew Lucas"
+format:
+  html:
+    theme:
+      - iceberg.scss
+
+execute:
+    echo: false
+---
+
+## Graphic
+
+```{r}
+#| label: setup
+#| message: false
+library(tidyverse)
+library(sportyR)
+
+set.seed(42)
+
+dir.create("year_plots", showWarnings = FALSE)
+
+seasons <- 2007:2024
+
+for (yr in seasons) {
+  yr_label <- paste0(substr(yr, 3, 4), "/", substr(yr + 1, 3, 4))
+
+  yr_shots <- read_csv(paste0("data/shots_", yr, ".csv"), show_col_types = FALSE) %>%
+    mutate(
+      event_label = case_when(
+        goal == 1 ~ "Goal",
+        event == "MISS" ~ "Miss",
+        TRUE ~ "Shot on Goal"
+      ),
+      event_label = factor(event_label, levels = c("Shot on Goal", "Miss", "Goal")),
+      x_jitter = arenaAdjustedXCord + runif(n(), -0.4, 0.4),
+      y_jitter = arenaAdjustedYCord + runif(n(), -0.4, 0.4),
+      corner_r = 28,
+      corner_cx = 72,
+      corner_cy = 14.5,
+      dist_br = sqrt((x_jitter - corner_cx)^2 + (y_jitter + corner_cy)^2),
+      dist_tr = sqrt((x_jitter - corner_cx)^2 + (y_jitter - corner_cy)^2),
+      dist_bl = sqrt((x_jitter + corner_cx)^2 + (y_jitter + corner_cy)^2),
+      dist_tl = sqrt((x_jitter + corner_cx)^2 + (y_jitter - corner_cy)^2),
+      in_corner_br = x_jitter > corner_cx & y_jitter < -corner_cy,
+      in_corner_tr = x_jitter > corner_cx & y_jitter > corner_cy,
+      in_corner_bl = x_jitter < -corner_cx & y_jitter < -corner_cy,
+      in_corner_tl = x_jitter < -corner_cx & y_jitter > corner_cy,
+      x_jitter = if_else(in_corner_br & dist_br > corner_r, corner_cx + corner_r * (x_jitter - corner_cx) / dist_br, x_jitter),
+      y_jitter = if_else(in_corner_br & dist_br > corner_r, -corner_cy + corner_r * (y_jitter + corner_cy) / dist_br, y_jitter),
+      x_jitter = if_else(in_corner_tr & dist_tr > corner_r, corner_cx + corner_r * (x_jitter - corner_cx) / dist_tr, x_jitter),
+      y_jitter = if_else(in_corner_tr & dist_tr > corner_r, corner_cy + corner_r * (y_jitter - corner_cy) / dist_tr, y_jitter),
+      x_jitter = if_else(in_corner_bl & dist_bl > corner_r, -corner_cx + corner_r * (x_jitter + corner_cx) / dist_bl, x_jitter),
+      y_jitter = if_else(in_corner_bl & dist_bl > corner_r, -corner_cy + corner_r * (y_jitter + corner_cy) / dist_bl, y_jitter),
+      x_jitter = if_else(in_corner_tl & dist_tl > corner_r, -corner_cx + corner_r * (x_jitter + corner_cx) / dist_tl, x_jitter),
+      y_jitter = if_else(in_corner_tl & dist_tl > corner_r, corner_cy + corner_r * (y_jitter - corner_cy) / dist_tl, y_jitter)
+    ) %>%
+    select(-corner_r, -corner_cx, -corner_cy, -dist_br, -dist_tr, -dist_bl, -dist_tl,
+           -in_corner_br, -in_corner_tr, -in_corner_bl, -in_corner_tl)
+
+  n_goals <- sum(yr_shots$goal == 1)
+
+  p <- geom_hockey("NHL") +
+    geom_point(
+      data = yr_shots %>% filter(event_label != "Goal"),
+      aes(x = x_jitter, y = y_jitter),
+      color = "#84a0c6", size = 0.15, alpha = 0.3
+    ) +
+    geom_point(
+      data = yr_shots %>% filter(event_label == "Goal"),
+      aes(x = x_jitter, y = y_jitter),
+      color = "#e27878", size = 0.6, alpha = 0.8
+    ) +
+    labs(
+      title = paste("Season", yr_label),
+      subtitle = paste0(nrow(yr_shots) %>% prettyNum(big.mark = ","), " shots  |  ",
+                        n_goals %>% prettyNum(big.mark = ","), " goals"),
+      caption = "Data: NHL play-by-play via sportyR | Current as of 2026-06-15 03:40 ET"
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5, color = "#c6c8d1"),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "#818596"),
+      plot.caption = element_text(size = 9, hjust = 0.5, color = "#6b7089"),
+      plot.background = element_rect(fill = "#161821", color = NA),
+      panel.background = element_rect(fill = "#161821", color = NA)
+    )
+
+  ggsave(paste0("year_plots/plot_", yr, ".png"), p, width = 12, height = 8, dpi = 150)
+}
+```
+
+```{=html}
+<div style="display: flex; gap: 16px; align-items: flex-start;">
+  <div style="width: 90px; flex-shrink: 0; padding-top: 40px;">
+    <p style="font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #c6c8d1;">Season</p>
+    <div id="season-buttons-left" style="display: flex; flex-direction: column; gap: 6px;"></div>
+  </div>
+  <div id="plot-display" style="flex: 1;">
+    <img id="plot-img" style="width: 100%; border-radius: 4px;" />
+  </div>
+  <div style="width: 90px; flex-shrink: 0; padding-top: 40px;">
+    <p style="font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #c6c8d1;">Season</p>
+    <div id="season-buttons-right" style="display: flex; flex-direction: column; gap: 6px;"></div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const seasons = [2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024];
+  const leftContainer = document.getElementById("season-buttons-left");
+  const rightContainer = document.getElementById("season-buttons-right");
+  const img = document.getElementById("plot-img");
+  const mid = Math.ceil(seasons.length / 2);
+  const leftSeasons = seasons.slice(0, mid);
+  const rightSeasons = seasons.slice(mid);
+
+  function createButton(yr) {
+    const label = (yr + "").slice(2) + "/" + (yr + 1 + "").slice(2);
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    btn.dataset.year = yr;
+    btn.style.cssText = "padding:6px 12px;border:1px solid #3e445e;border-radius:4px;cursor:pointer;font-size:13px;background:#1e2132;color:#c6c8d1;transition:all 0.15s;";
+    btn.addEventListener("click", function () {
+      document.querySelectorAll("#season-buttons-left button, #season-buttons-right button").forEach(function (b) {
+        b.style.background = "#1e2132";
+        b.style.borderColor = "#3e445e";
+        b.style.fontWeight = "normal";
+        b.style.color = "#c6c8d1";
+      });
+      btn.style.background = "#84a0c6";
+      btn.style.borderColor = "#84a0c6";
+      btn.style.color = "#161821";
+      btn.style.fontWeight = "bold";
+      img.src = "year_plots/plot_" + yr + ".png";
+    });
+    return btn;
+  }
+
+  leftSeasons.forEach(function (yr) { leftContainer.appendChild(createButton(yr)); });
+  rightSeasons.forEach(function (yr) { rightContainer.appendChild(createButton(yr)); });
+
+  document.querySelector("#season-buttons-left button").click();
+});
+</script>
+```

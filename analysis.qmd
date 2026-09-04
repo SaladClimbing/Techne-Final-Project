@@ -1,0 +1,19 @@
+---
+title: "Analysis of NHL shots from 2007-2026"
+format: html
+author: Andrew Lucas
+execute:
+    echo: false
+---
+
+```{r}
+#| label: setup
+#| message: false
+
+library(tidyverse)
+library(dplyr)
+library(readr)
+```
+
+## Hello world!
+**This is markdown**
