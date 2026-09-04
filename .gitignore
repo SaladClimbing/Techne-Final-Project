@@ -1,2 +1,4 @@
 # Data files (download from MoneyPuck)
 data/*.csv
+*_files/
+*_cache/
