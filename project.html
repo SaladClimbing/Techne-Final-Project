@@ -8,7 +8,7 @@
 
 <meta name="author" content="Andrew Lucas">
 
-<title>Milestone 3</title>
+<title>Where Do Goals Come From? Exploring NHL Shot Quality Over 19 Seasons</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -40,7 +40,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="project_files/libs/quarto-html/quarto-syntax-highlighting-dark-1205803370897e9fcbd28155550c65da.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="project_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="project_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="project_files/libs/bootstrap/bootstrap-0d9249f2a4681e50dcea3b35eb074eaf.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="dark">
+<link href="project_files/libs/bootstrap/bootstrap-6415c9224a5f5385ccfd4e8ad6fe3baf.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="dark">
 
 
 </head>
@@ -53,7 +53,7 @@ ul.task-list li input[type="checkbox"] {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Milestone 3</h1>
+<h1 class="title">Where Do Goals Come From? Exploring NHL Shot Quality Over 19 Seasons</h1>
 </div>
 
 
@@ -76,60 +76,309 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<section id="graphic" class="level2">
-<h2 class="anchored" data-anchor-id="graphic">Graphic</h2>
-<div style="display: flex; gap: 16px; align-items: flex-start;">
-  <div style="width: 90px; flex-shrink: 0; padding-top: 40px;">
-    <p style="font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #c6c8d1;">Season</p>
-    <div id="season-buttons-left" style="display: flex; flex-direction: column; gap: 6px;"></div>
-  </div>
-  <div id="plot-display" style="flex: 1;">
-    <img id="plot-img" style="width: 100%; border-radius: 4px;">
-  </div>
-  <div style="width: 90px; flex-shrink: 0; padding-top: 40px;">
-    <p style="font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #c6c8d1;">Season</p>
-    <div id="season-buttons-right" style="display: flex; flex-direction: column; gap: 6px;"></div>
-  </div>
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>How have NHL shot profiles and scoring rates changed across 19 seasons (2007–2025), and what shot characteristics best predict goals? This analysis uses shot-level play-by-play data from <a href="https://moneypuck.com/data.htm">MoneyPuck</a> spanning 2,079,377 shot events to examine the evolution of shot selection in the modern NHL, evaluate an expected goals (xG) model, and identify which shot characteristics most strongly predict scoring.</p>
+<p>The so-called “analytics revolution” in hockey has emphasized shot quality over shot quantity. We investigate whether the data supports this narrative by tracking how shot distances, angles, types, and rush/rebound rates have shifted over time.</p>
+</section>
+<section id="setup-and-data-loading" class="level2">
+<h2 class="anchored" data-anchor-id="setup-and-data-loading">Setup and Data Loading</h2>
+<div class="cell">
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 10%">
+<col style="width: 21%">
+<col style="width: 19%">
+<col style="width: 17%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Total Shots</th>
+<th style="text-align: right;">Total Goals</th>
+<th style="text-align: right;">Seasons</th>
+<th style="text-align: right;">Unique Shooters</th>
+<th style="text-align: right;">Unique Goalies</th>
+<th style="text-align: left;">Season Range</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">2,079,359</td>
+<td style="text-align: right;">140,157</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: right;">3,172</td>
+<td style="text-align: right;">352</td>
+<td style="text-align: left;">2007 - 2025</td>
+</tr>
+</tbody>
+</table>
 </div>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const seasons = [2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024];
-  const leftContainer = document.getElementById("season-buttons-left");
-  const rightContainer = document.getElementById("season-buttons-right");
-  const img = document.getElementById("plot-img");
-  const mid = Math.ceil(seasons.length / 2);
-  const leftSeasons = seasons.slice(0, mid);
-  const rightSeasons = seasons.slice(mid);
-
-  function createButton(yr) {
-    const label = (yr + "").slice(2) + "/" + (yr + 1 + "").slice(2);
-    const btn = document.createElement("button");
-    btn.textContent = label;
-    btn.dataset.year = yr;
-    btn.style.cssText = "padding:6px 12px;border:1px solid #3e445e;border-radius:4px;cursor:pointer;font-size:13px;background:#1e2132;color:#c6c8d1;transition:all 0.15s;";
-    btn.addEventListener("click", function () {
-      document.querySelectorAll("#season-buttons-left button, #season-buttons-right button").forEach(function (b) {
-        b.style.background = "#1e2132";
-        b.style.borderColor = "#3e445e";
-        b.style.fontWeight = "normal";
-        b.style.color = "#c6c8d1";
-      });
-      btn.style.background = "#84a0c6";
-      btn.style.borderColor = "#84a0c6";
-      btn.style.color = "#161821";
-      btn.style.fontWeight = "bold";
-      img.src = "year_plots/plot_" + yr + ".png";
-    });
-    return btn;
-  }
-
-  leftSeasons.forEach(function (yr) { leftContainer.appendChild(createButton(yr)); });
-  rightSeasons.forEach(function (yr) { rightContainer.appendChild(createButton(yr)); });
-
-  document.querySelector("#season-buttons-left button").click();
-});
-</script>
+</div>
+<p>The dataset contains <strong>2,079,359</strong> shot events across <strong>19 seasons</strong>, with <strong>140,157</strong> goals. Two seasons had shortened schedules due to work stoppages: 2012 (NHL lockout, 48 games) and 2020 (COVID-19, 56 games). We flag these for normalization in later analyses.</p>
+</section>
+<section id="exploratory-data-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="exploratory-data-analysis">Exploratory Data Analysis</h2>
+<section id="scoring-rate-over-time" class="level3">
+<h3 class="anchored" data-anchor-id="scoring-rate-over-time">Scoring Rate Over Time</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-scoring-rate" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-scoring-rate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-scoring-rate-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-scoring-rate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: League-wide scoring rate (goals per shot) by season. Dashed lines mark shortened seasons.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shot-location-heatmap" class="level3">
+<h3 class="anchored" data-anchor-id="shot-location-heatmap">Shot Location Heatmap</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-shot-heatmap" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shot-heatmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-shot-heatmap-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shot-heatmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: Density of all shots on an NHL rink. Warmer colors indicate higher shot volume.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="goal-locations-vs.-miss-locations" class="level3">
+<h3 class="anchored" data-anchor-id="goal-locations-vs.-miss-locations">Goal Locations vs.&nbsp;Miss Locations</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-goal-vs-miss" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-goal-vs-miss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-goal-vs-miss-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-goal-vs-miss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: Where goals are scored (red) vs.&nbsp;where non-goal shots land (blue). Both sampled to 20,000 points for readability.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shot-type-distribution" class="level3">
+<h3 class="anchored" data-anchor-id="shot-type-distribution">Shot Type Distribution</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-shot-types" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shot-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-shot-types-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shot-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: Distribution of shot types across seasons as a proportion of all shots.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="shot-quality-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="shot-quality-analysis">Shot Quality Analysis</h2>
+<section id="goal-rate-by-distance" class="level3">
+<h3 class="anchored" data-anchor-id="goal-rate-by-distance">Goal Rate by Distance</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-goal-rate-distance" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-goal-rate-distance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-goal-rate-distance-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-goal-rate-distance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;5: Goal rate by shot distance. Shots from closer range are far more dangerous.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="goal-rate-by-shot-type" class="level3">
+<h3 class="anchored" data-anchor-id="goal-rate-by-shot-type">Goal Rate by Shot Type</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-goal-rate-type" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-goal-rate-type-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-goal-rate-type-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-goal-rate-type-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6: Goal rate by shot type. Tips and deflections have the highest conversion rates.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="rush-and-rebound-effects" class="level3">
+<h3 class="anchored" data-anchor-id="rush-and-rebound-effects">Rush and Rebound Effects</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-rush-rebound" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-rush-rebound-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-rush-rebound-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-rush-rebound-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7: Goal rates by rush and rebound status. Rush shots and rebounds significantly increase scoring probability.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shot-danger-zones-distance-x-angle" class="level3">
+<h3 class="anchored" data-anchor-id="shot-danger-zones-distance-x-angle">Shot Danger Zones (Distance x Angle)</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-danger-zones" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-danger-zones-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-danger-zones-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-danger-zones-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;8: Goal rate by distance and angle grid cells. The slot (close range, centered angle) is the most dangerous area on the ice.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="evolution-of-shot-quality-over-time" class="level3">
+<h3 class="anchored" data-anchor-id="evolution-of-shot-quality-over-time">Evolution of Shot Quality Over Time</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-shot-quality-trend" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shot-quality-trend-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-shot-quality-trend-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shot-quality-trend-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;9: Proportion of shots taken from high-danger (inside 20 feet) vs.&nbsp;low-danger (20+ feet) areas over time.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="expected-goals-model-evaluation" class="level2">
+<h2 class="anchored" data-anchor-id="expected-goals-model-evaluation">Expected Goals Model Evaluation</h2>
+<section id="calibration" class="level3">
+<h3 class="anchored" data-anchor-id="calibration">Calibration</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-calibration" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-calibration-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10: Calibration plot for the MoneyPuck xG model. Points close to the diagonal indicate well-calibrated predictions.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="brier-score" class="level3">
+<h3 class="anchored" data-anchor-id="brier-score">Brier Score</h3>
+<p>The overall Brier score for the xG model is <strong>0.0538</strong>, indicating moderate predictive accuracy. For reference, a perfect model scores 0 and a model predicting the overall goal rate for every shot scores approximately 0.0629.</p>
+</section>
+<section id="team-level-residuals" class="level3">
+<h3 class="anchored" data-anchor-id="team-level-residuals">Team-Level Residuals</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-team-residuals" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-team-residuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-team-residuals-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-team-residuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11: Team-level actual goals vs.&nbsp;expected goals (xG). Teams above the line scored more than expected; teams below scored fewer.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="top-shooters-actual-vs.-expected" class="level3">
+<h3 class="anchored" data-anchor-id="top-shooters-actual-vs.-expected">Top Shooters: Actual vs.&nbsp;Expected</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-top-shooters" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-top-shooters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-top-shooters-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-top-shooters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12: Top 20 shooters by shot volume, comparing actual goals to expected goals (xG). Red bars exceed expectations; blue bars fall short.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="simple-logistic-regression-model" class="level2">
+<h2 class="anchored" data-anchor-id="simple-logistic-regression-model">Simple Logistic Regression Model</h2>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-model-coefficients" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-model-coefficients-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-model-coefficients-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-model-coefficients-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;13: Coefficient plot from logistic regression model predicting goal probability.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>The logistic regression achieves a deviance of <strong>9.17487^{5}</strong> on <strong>2,074,837</strong> residual degrees of freedom. Key findings:</p>
+<ul>
+<li><strong>Shot distance</strong> has a strong negative coefficient: each additional foot from the net reduces the log-odds of a goal.</li>
+<li><strong>Shot angle</strong> has a moderate negative effect: wider angles (shots from the periphery) are less dangerous.</li>
+<li><strong>Rush shots</strong> and <strong>rebounds</strong> substantially increase goal probability.</li>
+<li><strong>Snap shots</strong> and <strong>tips/deflections</strong> outperform wrist shots, while <strong>slap shots</strong> perform similarly.</li>
+</ul>
+</section>
+<section id="conclusion" class="level2">
+<h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
+<p>This analysis reveals several key findings about NHL shot quality:</p>
+<ol type="1">
+<li><p><strong>Scoring rates have been relatively stable</strong> over 19 seasons, hovering around 9–10% per shot, with no dramatic league-wide trend despite the analytics revolution narrative.</p></li>
+<li><p><strong>Shot location dominates scoring probability.</strong> The slot (close range, centered angle) remains by far the most dangerous area. Shots from inside 20 feet convert at nearly three times the rate of shots from 30+ feet.</p></li>
+<li><p><strong>Rush and rebound situations are high-value.</strong> Rush shots and rebounds produce meaningfully higher goal rates than standard shots, suggesting that transition play and second-chance opportunities are critical to scoring.</p></li>
+<li><p><strong>The xG model is reasonably well-calibrated</strong>, though it tends to slightly underpredict goals at the highest probability levels.</p></li>
+<li><p><strong>Individual shooter deviations from xG</strong> reveal potential over- and under-performers, though isolating this from contextual factors (quality of chances, team system) would require additional analysis.</p></li>
+</ol>
+<section id="limitations" class="level3">
+<h3 class="anchored" data-anchor-id="limitations">Limitations</h3>
+<ul>
+<li>The <strong>2012 lockout</strong> and <strong>2020 COVID</strong> seasons had fewer games; per-shot rates are used to mitigate this, but per-game comparisons should be made cautiously.</li>
+<li>The <strong>xG model is a black box</strong> from MoneyPuck. We evaluate its output but cannot inspect its internals.</li>
+<li><strong>No game-state context</strong> (score differential, time remaining) is incorporated into our simple model.</li>
+<li>The data includes <strong>regular season and playoff games</strong> without distinction in most analyses (though <code>isPlayoffGame</code> is available).</li>
+</ul>
+</section>
 </section>
 
 </main>

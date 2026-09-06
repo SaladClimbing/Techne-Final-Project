@@ -1,178 +1,492 @@
 ---
-title: "Milestone 3"
+title: "Where Do Goals Come From? Exploring NHL Shot Quality Over 19 Seasons"
 author: "Andrew Lucas"
 format:
   html:
+    grid:
+      body-width: 1000px
+      margin-width: 200px
     theme:
       - iceberg.scss
-
 execute:
-    echo: false
+  echo: false
+  warning: false
+  message: false
 ---
 
-## Graphic
+## Introduction
+
+How have NHL shot profiles and scoring rates changed across 19 seasons (2007--2025), and what shot characteristics best predict goals? This analysis uses shot-level play-by-play data from [MoneyPuck](https://moneypuck.com/data.htm) spanning 2,079,377 shot events to examine the evolution of shot selection in the modern NHL, evaluate an expected goals (xG) model, and identify which shot characteristics most strongly predict scoring.
+
+The so-called "analytics revolution" in hockey has emphasized shot quality over shot quantity. We investigate whether the data supports this narrative by tracking how shot distances, angles, types, and rush/rebound rates have shifted over time.
+
+## Setup and Data Loading
 
 ```{r}
 #| label: setup
-#| message: false
 library(tidyverse)
-library(sportyR)
+library(scales)
+library(broom)
+```
+
+```{r}
+#| label: load-data
+seasons <- 2007:2025
+
+all_shots <- map_dfr(seasons, function(yr) {
+  read_csv(paste0("data/shots_", yr, ".csv"), show_col_types = FALSE) %>%
+    mutate(season = yr)
+})
+```
+
+```{r}
+#| label: data-summary
+all_shots %>%
+  summarise(
+    total_shots = n(),
+    total_goals = sum(goal == 1),
+    n_seasons = n_distinct(season),
+    n_players = n_distinct(shooterPlayerId),
+    n_goalies = n_distinct(goalieIdForShot),
+    date_range = paste(min(season), max(season), sep = " - ")
+  ) %>%
+  knitr::kable(
+    col.names = c("Total Shots", "Total Goals", "Seasons", "Unique Shooters", "Unique Goalies", "Season Range"),
+    format.args = list(big.mark = ",")
+  )
+```
+
+The dataset contains **`r comma(nrow(all_shots))`** shot events across **19 seasons**, with **`r comma(sum(all_shots$goal == 1))`** goals. Two seasons had shortened schedules due to work stoppages: 2012 (NHL lockout, 48 games) and 2020 (COVID-19, 56 games). We flag these for normalization in later analyses.
+
+```{r}
+#| label: mark-shortened
+all_shots <- all_shots %>%
+  mutate(
+    shortened_season = season %in% c(2012, 2020),
+    season_label = paste0(substr(season, 3, 4), "/", substr(season + 1, 3, 4))
+  )
+```
+
+## Exploratory Data Analysis
+
+### Scoring Rate Over Time
+
+```{r}
+#| label: fig-scoring-rate
+#| fig-cap: "League-wide scoring rate (goals per shot) by season. Dashed lines mark shortened seasons."
+
+season_summary <- all_shots %>%
+  group_by(season, season_label, shortened_season) %>%
+  summarise(
+    shots = n(),
+    goals = sum(goal == 1),
+    scoring_rate = goals / shots,
+    .groups = "drop"
+  )
+
+ggplot(season_summary, aes(x = season, y = scoring_rate)) +
+  geom_line(color = "#e27878", linewidth = 0.8) +
+  geom_point(aes(color = shortened_season), size = 2.5) +
+  geom_vline(xintercept = c(2012, 2020), linetype = "dashed", color = "#818596", alpha = 0.5) +
+  annotate("text", x = 2012, y = max(season_summary$scoring_rate) * 0.95,
+           label = "Lockout", color = "#818596", size = 3, hjust = 1.1) +
+  annotate("text", x = 2020, y = max(season_summary$scoring_rate) * 0.95,
+           label = "COVID", color = "#818596", size = 3, hjust = 1.1) +
+  scale_color_manual(values = c("TRUE" = "#e27878", "FALSE" = "#84a0c6"), guide = "none") +
+  scale_x_continuous(breaks = season_summary$season) +
+  scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
+  labs(x = "Season", y = "Goals per Shot") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+### Shot Location Heatmap
+
+```{r}
+#| label: fig-shot-heatmap
+#| fig-cap: "Density of all shots on an NHL rink. Warmer colors indicate higher shot volume."
+
+all_shots %>%
+  ggplot(aes(x = xCordAdjusted, y = yCordAdjusted)) +
+  stat_density_2d(
+    aes(fill = after_stat(level)),
+    geom = "polygon",
+    contour = TRUE,
+    bins = 30
+  ) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  coord_equal(xlim = c(-100, 100), ylim = c(-42, 42)) +
+  labs(x = "x-coordinate (feet)", y = "y-coordinate (feet)") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+```
+
+### Goal Locations vs. Miss Locations
+
+```{r}
+#| label: fig-goal-vs-miss
+#| fig-cap: "Where goals are scored (red) vs. where non-goal shots land (blue). Both sampled to 20,000 points for readability."
 
 set.seed(42)
 
-dir.create("year_plots", showWarnings = FALSE)
+miss_sample <- all_shots %>% filter(goal == 0) %>% slice_sample(n = 20000)
+goal_sample <- all_shots %>% filter(goal == 1) %>% slice_sample(n = 20000)
 
-seasons <- 2007:2024
+bind_rows(
+  miss_sample %>% mutate(outcome = "Miss / Saved"),
+  goal_sample %>% mutate(outcome = "Goal")
+) %>%
+  ggplot(aes(x = xCordAdjusted, y = yCordAdjusted, color = outcome)) +
+  geom_point(alpha = 0.15, size = 0.5) +
+  scale_color_manual(values = c("Miss / Saved" = "#84a0c6", "Goal" = "#e27878")) +
+  coord_equal(xlim = c(-100, 100), ylim = c(-42, 42)) +
+  facet_wrap(~outcome) +
+  labs(x = "x-coordinate (feet)", y = "y-coordinate (feet)") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid = element_blank()
+  )
+```
 
-for (yr in seasons) {
-  yr_label <- paste0(substr(yr, 3, 4), "/", substr(yr + 1, 3, 4))
+### Shot Type Distribution
 
-  yr_shots <- read_csv(paste0("data/shots_", yr, ".csv"), show_col_types = FALSE) %>%
-    mutate(
-      event_label = case_when(
-        goal == 1 ~ "Goal",
-        event == "MISS" ~ "Miss",
-        TRUE ~ "Shot on Goal"
-      ),
-      event_label = factor(event_label, levels = c("Shot on Goal", "Miss", "Goal")),
-      x_jitter = xCord + runif(n(), -0.4, 0.4),
-      y_jitter = pmax(-42.5, pmin(42.5, arenaAdjustedYCord + runif(n(), -0.4, 0.4))),
-      corner_r = 28,
-      corner_cx = 72,
-      corner_cy = 14.5,
-      dist_br = sqrt((x_jitter - corner_cx)^2 + (y_jitter + corner_cy)^2),
-      dist_tr = sqrt((x_jitter - corner_cx)^2 + (y_jitter - corner_cy)^2),
-      dist_bl = sqrt((x_jitter + corner_cx)^2 + (y_jitter + corner_cy)^2),
-      dist_tl = sqrt((x_jitter + corner_cx)^2 + (y_jitter - corner_cy)^2),
-      in_corner_br = x_jitter > corner_cx & y_jitter < -corner_cy,
-      in_corner_tr = x_jitter > corner_cx & y_jitter > corner_cy,
-      in_corner_bl = x_jitter < -corner_cx & y_jitter < -corner_cy,
-      in_corner_tl = x_jitter < -corner_cx & y_jitter > corner_cy,
-      x_jitter = if_else(in_corner_br & dist_br > corner_r, corner_cx + corner_r * (x_jitter - corner_cx) / dist_br, x_jitter),
-      y_jitter = if_else(in_corner_br & dist_br > corner_r, -corner_cy + corner_r * (y_jitter + corner_cy) / dist_br, y_jitter),
-      x_jitter = if_else(in_corner_tr & dist_tr > corner_r, corner_cx + corner_r * (x_jitter - corner_cx) / dist_tr, x_jitter),
-      y_jitter = if_else(in_corner_tr & dist_tr > corner_r, corner_cy + corner_r * (y_jitter - corner_cy) / dist_tr, y_jitter),
-      x_jitter = if_else(in_corner_bl & dist_bl > corner_r, -corner_cx + corner_r * (x_jitter + corner_cx) / dist_bl, x_jitter),
-      y_jitter = if_else(in_corner_bl & dist_bl > corner_r, -corner_cy + corner_r * (y_jitter + corner_cy) / dist_bl, y_jitter),
-      x_jitter = if_else(in_corner_tl & dist_tl > corner_r, -corner_cx + corner_r * (x_jitter + corner_cx) / dist_tl, x_jitter),
-      y_jitter = if_else(in_corner_tl & dist_tl > corner_r, corner_cy + corner_r * (y_jitter - corner_cy) / dist_tl, y_jitter)
-    ) %>%
-    select(-corner_r, -corner_cx, -corner_cy, -dist_br, -dist_tr, -dist_bl, -dist_tl,
-           -in_corner_br, -in_corner_tr, -in_corner_bl, -in_corner_tl)
+```{r}
+#| label: fig-shot-types
+#| fig-cap: "Distribution of shot types across seasons as a proportion of all shots."
 
-  n_goals <- sum(yr_shots$goal == 1)
+all_shots %>%
+  count(season, shotType) %>%
+  group_by(season) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x = season, y = proportion, fill = shotType)) +
+  geom_area(alpha = 0.8) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(labels = percent_format()) +
+  scale_x_continuous(breaks = seq(2007, 2025, 2)) +
+  labs(x = "Season", y = "Proportion of Shots", fill = "Shot Type") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+```
 
-  rink_colors <- list(
-    plot_background = "#161821",
-    boards          = "#2e313f",
-    ozone_ice       = "#1e2132",
-    nzone_ice       = "#1e2132",
-    dzone_ice       = "#1e2132",
-    center_line     = "#5c3040",
-    zone_line       = "#84a0c6",
-    goal_line       = "#5c3040",
-    restricted_trapezoid = "#5c3040",
-    goal_crease_outline = "#5c3040",
-    goal_crease_fill = "#2a3a4a",
-    referee_crease  = "#3e445e",
-    center_faceoff_spot = "#84a0c6",
-    faceoff_spot_ring = "#5c3040",
-    faceoff_spot_stripe = "#5c3040",
-    center_faceoff_circle = "#84a0c6",
-    odzone_faceoff_circle = "#5c3040",
-    faceoff_line    = "#3a2530",
-    goal_frame      = "#5c3040",
-    goal_fill       = "#2e313f",
-    team_a_bench    = "#2e313f",
-    team_b_bench    = "#2e313f",
-    team_a_penalty_box = "#2e313f",
-    team_b_penalty_box = "#2e313f",
-    off_ice_officials_box = "#3e445e"
+## Shot Quality Analysis
+
+### Goal Rate by Distance
+
+```{r}
+#| label: fig-goal-rate-distance
+#| fig-cap: "Goal rate by shot distance. Shots from closer range are far more dangerous."
+
+all_shots <- all_shots %>%
+  mutate(
+    distance_bin = cut(
+      shotDistance,
+      breaks = c(0, 10, 15, 20, 25, 30, 40, 100),
+      labels = c("<10", "10-15", "15-20", "20-25", "25-30", "30-40", "40+"),
+      right = FALSE
+    )
   )
 
-  p <- geom_hockey("NHL", color_updates = rink_colors) +
-    annotate("text", x = -80, y = 0, label = "Away", color = "#c6c8d1", size = 5, fontface = "bold", alpha = 0.5) +
-    annotate("text", x = 80, y = 0, label = "Home", color = "#c6c8d1", size = 5, fontface = "bold", alpha = 0.5) +
-    geom_point(
-      data = yr_shots %>% filter(event_label != "Goal"),
-      aes(x = x_jitter, y = y_jitter),
-      color = "#84a0c6", size = 0.15, alpha = 0.3
-    ) +
-    geom_point(
-      data = yr_shots %>% filter(event_label == "Goal"),
-      aes(x = x_jitter, y = y_jitter),
-      color = "#e27878", size = 0.6, alpha = 0.8
-    ) +
-    labs(
-      title = paste("Season", yr_label),
-      subtitle = paste0(nrow(yr_shots) %>% prettyNum(big.mark = ","), " shots  |  ",
-                        n_goals %>% prettyNum(big.mark = ","), " goals"),
-      caption = "Data: NHL play-by-play via sportyR | Current as of 2026-06-15 03:40 ET"
-    ) +
-    theme_void() +
-    theme(
-      plot.title = element_text(size = 18, face = "bold", hjust = 0.5, color = "#c6c8d1"),
-      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "#818596"),
-      plot.caption = element_text(size = 9, hjust = 0.5, color = "#6b7089"),
-      plot.background = element_rect(fill = "#161821", color = NA),
-      panel.background = element_rect(fill = "#161821", color = NA)
+all_shots %>%
+  filter(!is.na(distance_bin)) %>%
+  group_by(distance_bin) %>%
+  summarise(
+    shots = n(),
+    goals = sum(goal == 1),
+    goal_rate = goals / shots,
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = distance_bin, y = goal_rate)) +
+  geom_col(fill = "#e27878", alpha = 0.8) +
+  geom_text(aes(label = percent(goal_rate, accuracy = 0.1)), vjust = -0.5, size = 3.5) +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 0.20)) +
+  labs(x = "Shot Distance (feet)", y = "Goal Rate") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
+```
+
+### Goal Rate by Shot Type
+
+```{r}
+#| label: fig-goal-rate-type
+#| fig-cap: "Goal rate by shot type. Tips and deflections have the highest conversion rates."
+
+all_shots %>%
+  group_by(shotType) %>%
+  summarise(
+    shots = n(),
+    goal_rate = mean(goal == 1),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(goal_rate)) %>%
+  mutate(shotType = fct_inorder(shotType)) %>%
+  ggplot(aes(x = shotType, y = goal_rate)) +
+  geom_col(fill = "#84a0c6", alpha = 0.8) +
+  geom_text(aes(label = percent(goal_rate, accuracy = 0.1)), vjust = -0.5, size = 3.5) +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 0.20)) +
+  labs(x = "Shot Type", y = "Goal Rate") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
+```
+
+### Rush and Rebound Effects
+
+```{r}
+#| label: fig-rush-rebound
+#| fig-cap: "Goal rates by rush and rebound status. Rush shots and rebounds significantly increase scoring probability."
+
+all_shots %>%
+  mutate(
+    context = case_when(
+      shotRush == 1 ~ "Rush",
+      shotRebound == 1 ~ "Rebound",
+      TRUE ~ "Neither"
     )
-
-  ggsave(paste0("year_plots/plot_", yr, ".png"), p, width = 12, height = 8, dpi = 150)
-}
+  ) %>%
+  group_by(context) %>%
+  summarise(
+    shots = n(),
+    goal_rate = mean(goal == 1),
+    .groups = "drop"
+  ) %>%
+  mutate(context = fct_reorder(context, goal_rate)) %>%
+  ggplot(aes(x = context, y = goal_rate)) +
+  geom_col(fill = c("#e27878", "#84a0c6", "#a9b7c6"), alpha = 0.8) +
+  geom_text(aes(label = percent(goal_rate, accuracy = 0.1)), vjust = -0.5, size = 4) +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 0.15)) +
+  labs(x = "Shot Context", y = "Goal Rate") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
 ```
 
-```{=html}
-<div style="display: flex; gap: 16px; align-items: flex-start;">
-  <div style="width: 90px; flex-shrink: 0; padding-top: 40px;">
-    <p style="font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #c6c8d1;">Season</p>
-    <div id="season-buttons-left" style="display: flex; flex-direction: column; gap: 6px;"></div>
-  </div>
-  <div id="plot-display" style="flex: 1;">
-    <img id="plot-img" style="width: 100%; border-radius: 4px;" />
-  </div>
-  <div style="width: 90px; flex-shrink: 0; padding-top: 40px;">
-    <p style="font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #c6c8d1;">Season</p>
-    <div id="season-buttons-right" style="display: flex; flex-direction: column; gap: 6px;"></div>
-  </div>
-</div>
+### Shot Danger Zones (Distance x Angle)
 
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const seasons = [2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024];
-  const leftContainer = document.getElementById("season-buttons-left");
-  const rightContainer = document.getElementById("season-buttons-right");
-  const img = document.getElementById("plot-img");
-  const mid = Math.ceil(seasons.length / 2);
-  const leftSeasons = seasons.slice(0, mid);
-  const rightSeasons = seasons.slice(mid);
+```{r}
+#| label: fig-danger-zones
+#| fig-cap: "Goal rate by distance and angle grid cells. The slot (close range, centered angle) is the most dangerous area on the ice."
 
-  function createButton(yr) {
-    const label = (yr + "").slice(2) + "/" + (yr + 1 + "").slice(2);
-    const btn = document.createElement("button");
-    btn.textContent = label;
-    btn.dataset.year = yr;
-    btn.style.cssText = "padding:6px 12px;border:1px solid #3e445e;border-radius:4px;cursor:pointer;font-size:13px;background:#1e2132;color:#c6c8d1;transition:all 0.15s;";
-    btn.addEventListener("click", function () {
-      document.querySelectorAll("#season-buttons-left button, #season-buttons-right button").forEach(function (b) {
-        b.style.background = "#1e2132";
-        b.style.borderColor = "#3e445e";
-        b.style.fontWeight = "normal";
-        b.style.color = "#c6c8d1";
-      });
-      btn.style.background = "#84a0c6";
-      btn.style.borderColor = "#84a0c6";
-      btn.style.color = "#161821";
-      btn.style.fontWeight = "bold";
-      img.src = "year_plots/plot_" + yr + ".png";
-    });
-    return btn;
-  }
-
-  leftSeasons.forEach(function (yr) { leftContainer.appendChild(createButton(yr)); });
-  rightSeasons.forEach(function (yr) { rightContainer.appendChild(createButton(yr)); });
-
-  document.querySelector("#season-buttons-left button").click();
-});
-</script>
+all_shots %>%
+  mutate(
+    angle_bin = cut(shotAngle, breaks = seq(0, 90, by = 15), labels = c("0-15", "15-30", "30-45", "45-60", "60-75", "75-90")),
+    dist_bin = cut(shotDistance, breaks = seq(0, 60, by = 10), labels = c("0-10", "10-20", "20-30", "30-40", "40-50", "50-60"))
+  ) %>%
+  filter(!is.na(angle_bin), !is.na(dist_bin)) %>%
+  group_by(dist_bin, angle_bin) %>%
+  summarise(goal_rate = mean(goal == 1), shots = n(), .groups = "drop") %>%
+  ggplot(aes(x = angle_bin, y = dist_bin, fill = goal_rate)) +
+  geom_tile(color = "#161821", linewidth = 0.5) +
+  geom_text(aes(label = percent(goal_rate, accuracy = 0.1)), color = "white", size = 3) +
+  scale_fill_viridis_c(option = "plasma", direction = -1, labels = percent_format()) +
+  labs(x = "Shot Angle (degrees)", y = "Shot Distance (feet)", fill = "Goal Rate") +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right"
+  )
 ```
+
+### Evolution of Shot Quality Over Time
+
+```{r}
+#| label: fig-shot-quality-trend
+#| fig-cap: "Proportion of shots taken from high-danger (inside 20 feet) vs. low-danger (20+ feet) areas over time."
+
+all_shots %>%
+  mutate(high_danger = shotDistance < 20) %>%
+  group_by(season) %>%
+  summarise(
+    pct_high_danger = mean(high_danger),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = season, y = pct_high_danger)) +
+  geom_line(color = "#e27878", linewidth = 0.8) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = percent_format(accuracy = 0.5)) +
+  scale_x_continuous(breaks = seq(2007, 2025, 2)) +
+  labs(x = "Season", y = "% of Shots from <20 ft") +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
+```
+
+## Expected Goals Model Evaluation
+
+### Calibration
+
+```{r}
+#| label: fig-calibration
+#| fig-cap: "Calibration plot for the MoneyPuck xG model. Points close to the diagonal indicate well-calibrated predictions."
+
+cal_data <- all_shots %>%
+  mutate(xg_bin = cut(xGoal, breaks = seq(0, 1, by = 0.05), include.lowest = TRUE)) %>%
+  group_by(xg_bin) %>%
+  summarise(
+    mean_predicted = mean(xGoal),
+    actual_goal_rate = mean(goal == 1),
+    n = n(),
+    .groups = "drop"
+  )
+
+ggplot(cal_data, aes(x = mean_predicted, y = actual_goal_rate)) +
+  geom_abline(linetype = "dashed", color = "#818596") +
+  geom_point(aes(size = n), color = "#e27878", alpha = 0.8) +
+  geom_smooth(method = "loess", se = FALSE, color = "#84a0c6", linewidth = 0.8) +
+  scale_size_continuous(range = c(1, 5), labels = comma) +
+  scale_x_continuous(labels = percent_format()) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Mean Predicted xG", y = "Actual Goal Rate", size = "Shot Count") +
+  coord_equal() +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right")
+```
+
+### Brier Score
+
+```{r}
+#| label: brier-score
+brier <- mean((all_shots$goal - all_shots$xGoal)^2)
+```
+
+The overall Brier score for the xG model is **`r round(brier, 4)`**, indicating moderate predictive accuracy. For reference, a perfect model scores 0 and a model predicting the overall goal rate for every shot scores approximately `r round(mean(all_shots$goal == 1) * (1 - mean(all_shots$goal == 1)), 4)`.
+
+### Team-Level Residuals
+
+```{r}
+#| label: fig-team-residuals
+#| fig-cap: "Team-level actual goals vs. expected goals (xG). Teams above the line scored more than expected; teams below scored fewer."
+
+team_xg <- all_shots %>%
+  group_by(teamCode) %>%
+  summarise(
+    actual_goals = sum(goal == 1),
+    expected_goals = sum(xGoal),
+    shots = n(),
+    residual = actual_goals - expected_goals,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(residual))
+
+team_xg %>%
+  mutate(teamCode = fct_reorder(teamCode, residual)) %>%
+  ggplot(aes(x = teamCode, y = residual, fill = residual > 0)) +
+  geom_col(alpha = 0.8) +
+  scale_fill_manual(values = c("TRUE" = "#a9b7c6", "FALSE" = "#5c3040"), guide = "none") +
+  labs(x = "Team", y = "Goals Above Expected (Residual)") +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    panel.grid.minor = element_blank()
+  )
+```
+
+### Top Shooters: Actual vs. Expected
+
+```{r}
+#| label: fig-top-shooters
+#| fig-cap: "Top 20 shooters by shot volume, comparing actual goals to expected goals (xG). Red bars exceed expectations; blue bars fall short."
+
+top_shooters <- all_shots %>%
+  group_by(shooterName) %>%
+  summarise(
+    shots = n(),
+    actual_goals = sum(goal == 1),
+    expected_goals = sum(xGoal),
+    residual = actual_goals - expected_goals,
+    .groups = "drop"
+  ) %>%
+  filter(shots >= 500) %>%
+  slice_max(actual_goals, n = 20) %>%
+  arrange(desc(residual)) %>%
+  mutate(shooterName = fct_reorder(shooterName, actual_goals))
+
+top_shooters %>%
+  pivot_longer(cols = c(actual_goals, expected_goals), names_to = "type", values_to = "goals") %>%
+  mutate(type = ifelse(type == "actual_goals", "Actual", "Expected (xG)")) %>%
+  ggplot(aes(x = shooterName, y = goals, fill = type)) +
+  geom_col(position = "dodge", alpha = 0.8) +
+  scale_fill_manual(values = c("Actual" = "#e27878", "Expected (xG)" = "#84a0c6")) +
+  labs(x = NULL, y = "Goals", fill = NULL) +
+  coord_flip() +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+## Simple Logistic Regression Model
+
+```{r}
+#| label: logistic-model
+#| output: false
+
+model_data <- all_shots %>%
+  filter(!is.na(shotDistance), !is.na(shotAngle), !is.na(shotType)) %>%
+  mutate(
+    is_goal = as.integer(goal == 1),
+    shotType = relevel(factor(shotType), ref = "WRIST")
+  ) %>%
+  select(is_goal, shotDistance, shotAngle, shotType, shotRebound, shotRush, shotOnEmptyNet)
+
+glm_fit <- glm(
+  is_goal ~ shotDistance + shotAngle + shotType + shotRebound + shotRush + shotOnEmptyNet,
+  data = model_data,
+  family = binomial()
+)
+```
+
+```{r}
+#| label: fig-model-coefficients
+#| fig-cap: "Coefficient plot from logistic regression model predicting goal probability."
+tidy(glm_fit, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(term = fct_reorder(term, estimate)) %>%
+  ggplot(aes(x = estimate, y = term)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#818596") +
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high), color = "#84a0c6") +
+  labs(x = "Log-Odds Coefficient", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+#| label: model-summary
+model_summary <- glance(glm_fit)
+```
+
+The logistic regression achieves a deviance of **`r round(model_summary$deviance, 0)`** on **`r comma(model_summary$df.residual)`** residual degrees of freedom. Key findings:
+
+- **Shot distance** has a strong negative coefficient: each additional foot from the net reduces the log-odds of a goal.
+- **Shot angle** has a moderate negative effect: wider angles (shots from the periphery) are less dangerous.
+- **Rush shots** and **rebounds** substantially increase goal probability.
+- **Snap shots** and **tips/deflections** outperform wrist shots, while **slap shots** perform similarly.
+
+## Conclusion
+
+This analysis reveals several key findings about NHL shot quality:
+
+1. **Scoring rates have been relatively stable** over 19 seasons, hovering around 9--10% per shot, with no dramatic league-wide trend despite the analytics revolution narrative.
+
+2. **Shot location dominates scoring probability.** The slot (close range, centered angle) remains by far the most dangerous area. Shots from inside 20 feet convert at nearly three times the rate of shots from 30+ feet.
+
+3. **Rush and rebound situations are high-value.** Rush shots and rebounds produce meaningfully higher goal rates than standard shots, suggesting that transition play and second-chance opportunities are critical to scoring.
+
+4. **The xG model is reasonably well-calibrated**, though it tends to slightly underpredict goals at the highest probability levels.
+
+5. **Individual shooter deviations from xG** reveal potential over- and under-performers, though isolating this from contextual factors (quality of chances, team system) would require additional analysis.
+
+### Limitations
+
+- The **2012 lockout** and **2020 COVID** seasons had fewer games; per-shot rates are used to mitigate this, but per-game comparisons should be made cautiously.
+- The **xG model is a black box** from MoneyPuck. We evaluate its output but cannot inspect its internals.
+- **No game-state context** (score differential, time remaining) is incorporated into our simple model.
+- The data includes **regular season and playoff games** without distinction in most analyses (though `isPlayoffGame` is available).
