@@ -2,3 +2,4 @@
 data/*.csv
 *_files/
 *_cache/
+*_plots/

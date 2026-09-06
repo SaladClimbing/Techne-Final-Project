@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Andrew Lucas">
+
+<title>Where Do Goals Come From? Exploring NHL Shot Quality Over 19 Seasons</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="project_files/libs/clipboard/clipboard.min.js"></script>
+<script src="project_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="project_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="project_files/libs/quarto-html/popper.min.js"></script>
+<script src="project_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="project_files/libs/quarto-html/anchor.min.js"></script>
+<link href="project_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="project_files/libs/quarto-html/quarto-syntax-highlighting-dark-1205803370897e9fcbd28155550c65da.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="project_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="project_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="project_files/libs/bootstrap/bootstrap-6415c9224a5f5385ccfd4e8ad6fe3baf.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="dark">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Where Do Goals Come From? Exploring NHL Shot Quality Over 19 Seasons</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Andrew Lucas </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>How have NHL shot profiles and scoring rates changed across 19 seasons (2007–2025), and what shot characteristics best predict goals? This analysis uses shot-level play-by-play data from <a href="https://moneypuck.com/data.htm">MoneyPuck</a> spanning 2,079,377 shot events to examine the evolution of shot selection in the modern NHL, evaluate an expected goals (xG) model, and identify which shot characteristics most strongly predict scoring.</p>
+<p>The so-called “analytics revolution” in hockey has emphasized shot quality over shot quantity. We investigate whether the data supports this narrative by tracking how shot distances, angles, types, and rush/rebound rates have shifted over time.</p>
+</section>
+<section id="setup-and-data-loading" class="level2">
+<h2 class="anchored" data-anchor-id="setup-and-data-loading">Setup and Data Loading</h2>
+<div class="cell">
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 10%">
+<col style="width: 21%">
+<col style="width: 19%">
+<col style="width: 17%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: right;">Total Shots</th>
+<th style="text-align: right;">Total Goals</th>
+<th style="text-align: right;">Seasons</th>
+<th style="text-align: right;">Unique Shooters</th>
+<th style="text-align: right;">Unique Goalies</th>
+<th style="text-align: left;">Season Range</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">2,079,359</td>
+<td style="text-align: right;">140,157</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: right;">3,172</td>
+<td style="text-align: right;">352</td>
+<td style="text-align: left;">2007 - 2025</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>The dataset contains <strong>2,079,359</strong> shot events across <strong>19 seasons</strong>, with <strong>140,157</strong> goals. Two seasons had shortened schedules due to work stoppages: 2012 (NHL lockout, 48 games) and 2020 (COVID-19, 56 games). We flag these for normalization in later analyses.</p>
+</section>
+<section id="exploratory-data-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="exploratory-data-analysis">Exploratory Data Analysis</h2>
+<section id="scoring-rate-over-time" class="level3">
+<h3 class="anchored" data-anchor-id="scoring-rate-over-time">Scoring Rate Over Time</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-scoring-rate" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-scoring-rate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-scoring-rate-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-scoring-rate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: League-wide scoring rate (goals per shot) by season. Dashed lines mark shortened seasons.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shot-location-heatmap" class="level3">
+<h3 class="anchored" data-anchor-id="shot-location-heatmap">Shot Location Heatmap</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-shot-heatmap" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shot-heatmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-shot-heatmap-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shot-heatmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: Density of all shots on an NHL rink. Warmer colors indicate higher shot volume.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="goal-locations-vs.-miss-locations" class="level3">
+<h3 class="anchored" data-anchor-id="goal-locations-vs.-miss-locations">Goal Locations vs.&nbsp;Miss Locations</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-goal-vs-miss" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-goal-vs-miss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-goal-vs-miss-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-goal-vs-miss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: Where goals are scored (red) vs.&nbsp;where non-goal shots land (blue). Both sampled to 20,000 points for readability.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shot-type-distribution" class="level3">
+<h3 class="anchored" data-anchor-id="shot-type-distribution">Shot Type Distribution</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-shot-types" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shot-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-shot-types-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shot-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: Distribution of shot types across seasons as a proportion of all shots.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="shot-quality-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="shot-quality-analysis">Shot Quality Analysis</h2>
+<section id="goal-rate-by-distance" class="level3">
+<h3 class="anchored" data-anchor-id="goal-rate-by-distance">Goal Rate by Distance</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-goal-rate-distance" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-goal-rate-distance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-goal-rate-distance-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-goal-rate-distance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;5: Goal rate by shot distance. Shots from closer range are far more dangerous.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="goal-rate-by-shot-type" class="level3">
+<h3 class="anchored" data-anchor-id="goal-rate-by-shot-type">Goal Rate by Shot Type</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-goal-rate-type" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-goal-rate-type-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-goal-rate-type-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-goal-rate-type-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6: Goal rate by shot type. Tips and deflections have the highest conversion rates.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="rush-and-rebound-effects" class="level3">
+<h3 class="anchored" data-anchor-id="rush-and-rebound-effects">Rush and Rebound Effects</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-rush-rebound" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-rush-rebound-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-rush-rebound-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-rush-rebound-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7: Goal rates by rush and rebound status. Rush shots and rebounds significantly increase scoring probability.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shot-danger-zones-distance-x-angle" class="level3">
+<h3 class="anchored" data-anchor-id="shot-danger-zones-distance-x-angle">Shot Danger Zones (Distance x Angle)</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-danger-zones" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-danger-zones-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-danger-zones-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-danger-zones-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;8: Goal rate by distance and angle grid cells. The slot (close range, centered angle) is the most dangerous area on the ice.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="evolution-of-shot-quality-over-time" class="level3">
+<h3 class="anchored" data-anchor-id="evolution-of-shot-quality-over-time">Evolution of Shot Quality Over Time</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-shot-quality-trend" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shot-quality-trend-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-shot-quality-trend-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-shot-quality-trend-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;9: Proportion of shots taken from high-danger (inside 20 feet) vs.&nbsp;low-danger (20+ feet) areas over time.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="expected-goals-model-evaluation" class="level2">
+<h2 class="anchored" data-anchor-id="expected-goals-model-evaluation">Expected Goals Model Evaluation</h2>
+<section id="calibration" class="level3">
+<h3 class="anchored" data-anchor-id="calibration">Calibration</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-calibration" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-calibration-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10: Calibration plot for the MoneyPuck xG model. Points close to the diagonal indicate well-calibrated predictions.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="brier-score" class="level3">
+<h3 class="anchored" data-anchor-id="brier-score">Brier Score</h3>
+<p>The overall Brier score for the xG model is <strong>0.0538</strong>, indicating moderate predictive accuracy. For reference, a perfect model scores 0 and a model predicting the overall goal rate for every shot scores approximately 0.0629.</p>
+</section>
+<section id="team-level-residuals" class="level3">
+<h3 class="anchored" data-anchor-id="team-level-residuals">Team-Level Residuals</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-team-residuals" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-team-residuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-team-residuals-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-team-residuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11: Team-level actual goals vs.&nbsp;expected goals (xG). Teams above the line scored more than expected; teams below scored fewer.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="top-shooters-actual-vs.-expected" class="level3">
+<h3 class="anchored" data-anchor-id="top-shooters-actual-vs.-expected">Top Shooters: Actual vs.&nbsp;Expected</h3>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-top-shooters" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-top-shooters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-top-shooters-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-top-shooters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12: Top 20 shooters by shot volume, comparing actual goals to expected goals (xG). Red bars exceed expectations; blue bars fall short.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="simple-logistic-regression-model" class="level2">
+<h2 class="anchored" data-anchor-id="simple-logistic-regression-model">Simple Logistic Regression Model</h2>
+<div class="cell">
+<div class="cell-output-display">
+<div id="fig-model-coefficients" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-model-coefficients-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="project_files/figure-html/fig-model-coefficients-1.png" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-model-coefficients-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;13: Coefficient plot from logistic regression model predicting goal probability.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>The logistic regression achieves a deviance of <strong>9.17487^{5}</strong> on <strong>2,074,837</strong> residual degrees of freedom. Key findings:</p>
+<ul>
+<li><strong>Shot distance</strong> has a strong negative coefficient: each additional foot from the net reduces the log-odds of a goal.</li>
+<li><strong>Shot angle</strong> has a moderate negative effect: wider angles (shots from the periphery) are less dangerous.</li>
+<li><strong>Rush shots</strong> and <strong>rebounds</strong> substantially increase goal probability.</li>
+<li><strong>Snap shots</strong> and <strong>tips/deflections</strong> outperform wrist shots, while <strong>slap shots</strong> perform similarly.</li>
+</ul>
+</section>
+<section id="conclusion" class="level2">
+<h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
+<p>This analysis reveals several key findings about NHL shot quality:</p>
+<ol type="1">
+<li><p><strong>Scoring rates have been relatively stable</strong> over 19 seasons, hovering around 9–10% per shot, with no dramatic league-wide trend despite the analytics revolution narrative.</p></li>
+<li><p><strong>Shot location dominates scoring probability.</strong> The slot (close range, centered angle) remains by far the most dangerous area. Shots from inside 20 feet convert at nearly three times the rate of shots from 30+ feet.</p></li>
+<li><p><strong>Rush and rebound situations are high-value.</strong> Rush shots and rebounds produce meaningfully higher goal rates than standard shots, suggesting that transition play and second-chance opportunities are critical to scoring.</p></li>
+<li><p><strong>The xG model is reasonably well-calibrated</strong>, though it tends to slightly underpredict goals at the highest probability levels.</p></li>
+<li><p><strong>Individual shooter deviations from xG</strong> reveal potential over- and under-performers, though isolating this from contextual factors (quality of chances, team system) would require additional analysis.</p></li>
+</ol>
+<section id="limitations" class="level3">
+<h3 class="anchored" data-anchor-id="limitations">Limitations</h3>
+<ul>
+<li>The <strong>2012 lockout</strong> and <strong>2020 COVID</strong> seasons had fewer games; per-shot rates are used to mitigate this, but per-game comparisons should be made cautiously.</li>
+<li>The <strong>xG model is a black box</strong> from MoneyPuck. We evaluate its output but cannot inspect its internals.</li>
+<li><strong>No game-state context</strong> (score differential, time remaining) is incorporated into our simple model.</li>
+<li>The data includes <strong>regular season and playoff games</strong> without distinction in most analyses (though <code>isPlayoffGame</code> is available).</li>
+</ul>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
